@@ -11,4 +11,4 @@ deliverables/*
 lib/*
 
 # def dont share my device credentials 
-inc/device_credentials.hpp
+include/device_credentials.hpp
