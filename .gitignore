@@ -7,3 +7,5 @@
 # do not upload cert files
 hub/certs/*
 deliverables/*
+
+lib/*
