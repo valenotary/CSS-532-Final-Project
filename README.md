@@ -6,8 +6,11 @@ This particular repository is merely a proof-of-concept, and therefore is extrem
 The following sequence diagram illustrates a sample usecase of this project.
 ![Here is a sequence diagram that illustrates a sample usecase of this project.](./diagrams/Sequence_Diagram_SwipeUp.png)
 [Here is a video that demonstrates the full project in action.](https://drive.google.com/file/d/1FRbBJqgvwo-OsWDxSmSbhf1nBRPFdGwT/view?usp=sharing)  
+[Another video, with the lights off.](https://drive.google.com/file/d/1t5s9y2KN-kz2gy2Bqp8x6UXWdlEbkmz9/view?usp=sharing)  
 Here is a different diagram of how the pieces interact with each other at a higher level:
-![Here is a different diagram of how the pieces interact with each other at a higher level:](./diagrams/SDGC_dataflow.png)
+![Here is a different diagram of how the pieces interact with each other at a higher level:](./diagrams/SDGC_dataflow.png)  
+Here is a circuit diagram of the wearable device:  
+![Diagram](./diagrams/circuitdiagram.png)
 
 # Repository Structure
 If for some reason you're interested on trying to run all of this yourself, here is a brief rundown of what you'll need to keep track of; some things were included in the .gitignore to save space that will be crucial to running the program.  
