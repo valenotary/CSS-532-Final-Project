@@ -16,7 +16,7 @@
         Initialize Components:
             - Wifi V
             - Bluetooth V
-            - imu6050 (Accelerometer/Gyroscope) V
+            - mpu6050 (Accelerometer/Gyroscope) V
             - SVM V
 
 
@@ -49,8 +49,6 @@ enum class CurrentPrediction { SwipeUp = 0, SwipeDown, Misc };
 
 const int16_t ACCEL_THRESHOLD = 300;
 
-// BLUETOOTH STUFF
-
 // ACCELEROEMETER STUFF
 MPU6050 accelgyro(0x68);
 
@@ -72,7 +70,8 @@ size_t buffer_index = 0;
 
 size_t record_length = 0;
 unsigned long time_now = 0;
-
+unsigned long inference_duration = 0;
+unsigned long roundtrip_duration = 0;
 // ML MODEL
 Eloquent::ML::Port::SVM svm;
 
@@ -86,7 +85,7 @@ void setup() {
     SDGC::wifi_helper::wifi_setup(sslClient, mqttClient);
     SDGC::wifi_helper::wifi_connect();
     SDGC::wifi_helper::mqtt_connect(mqttClient);
-    
+
     Serial.println("Letting Hub know that I am alive...");
     mqttClient.beginMessage("SDGC/arduino/outgoing");
     StaticJsonDocument<256> connectedJSONMessage;
@@ -113,6 +112,8 @@ void setup() {
     Serial.println("Starting in BLE mode...");
     SDGC::BLE_helper::ble_setup(); // central device
 #endif
+    Serial.print("Model size: ");
+    // Serial.println(sizeof(Eloquent::ML::Port::SVM));
     SDGC::IMU_helper::imu_setup(accelgyro);
     currentState = CurrentState::Idle;
     currentPrediction = CurrentPrediction::Misc;
@@ -178,6 +179,7 @@ void loop() {
             Serial.println("Gesture starting to record...");
             // digitalWrite(ledPin, HIGH);
             currentState = CurrentState::GestureRecording;
+            time_now=millis();
         }
         else if (currentState == CurrentState::GestureRecording && record_length >= 10) { // wrap up the recording
             Serial.println("Stopping the recording...");
@@ -202,17 +204,20 @@ void loop() {
         else if (currentState ==
                  CurrentState::GestureFinished) { // determine how to send the data to the connected device
             Serial.println("Running inference...");
+            inference_duration = millis();
             currentPrediction = static_cast<CurrentPrediction>(svm.predict(gesture_buffer));
+            inference_duration = millis() - inference_duration; // crude timestamping 
             String currentPredictionString = svm.idxToLabel(static_cast<uint8_t>(currentPrediction));
             Serial.print("Predicted action: ");
             Serial.println(currentPredictionString);
             if (currentPrediction != CurrentPrediction::Misc) {
 #if defined MODE_WIFI // send to cloud, let hub send the BLE byte message
                 Serial.println("Publishing MQTT message...");
+                roundtrip_duration = millis();
                 mqttClient.beginMessage("SDGC/arduino/outgoing");
-                StaticJsonDocument<256> doc;
-                doc["gesture"] = currentPredictionString;
-                serializeJson(doc, mqttClient);
+                StaticJsonDocument<256> doc1;
+                doc1["gesture"] = currentPredictionString;
+                serializeJson(doc1, mqttClient);
                 mqttClient.endMessage();
                 Serial.println("MQTT message sent. Waiting for reply...");
                 bool hub_reply_success = false;
@@ -220,16 +225,26 @@ void loop() {
                     if (mqttClient.parseMessage()) {
                         Serial.print("Got message from: ");
                         Serial.println(mqttClient.messageTopic());
-                        StaticJsonDocument<256> doc;
-                        deserializeJson(doc, mqttClient);
-                        if (doc["action"] == "notify" && doc["fromClientID"] == "SDGC-Hub" &&
-                            doc["toClientID"] == "SDGC-Arduino" && doc["message"] == "actionCompleted") {
+                        StaticJsonDocument<256> doc2;
+                        deserializeJson(doc2, mqttClient);
+                        if (doc2["action"] == "notify" && doc2["fromClientID"] == "SDGC-Hub" &&
+                            doc2["toClientID"] == "SDGC-Arduino" && doc2["message"] == "actionCompleted") {
                             Serial.println("Hub has propagated the action to the BLE device");
                             hub_reply_success = true;
                         }
                     }
                 }
+                roundtrip_duration = millis() - roundtrip_duration;
                 Serial.println("Got response from cloud...");
+                Serial.println("Reporting duration metrics to cloud...");
+                mqttClient.beginMessage("SDGC/arduino/outgoing");
+                StaticJsonDocument<256> doc3;
+                doc3["action"] = "metricReport";
+                doc3["inference"] = inference_duration;
+                doc3["roundtrip"] = roundtrip_duration;
+                doc3["total"] = inference_duration+roundtrip_duration;
+                serializeJson(doc3, mqttClient);
+                mqttClient.endMessage();
 #elif defined MODE_BLE // we send the BLE byte message ourselves, no cloud involved
             Serial.println("Propagating message to bluetooth device...");
             ledCharacteristic.writeValue(static_cast<byte>(currentPrediction));
